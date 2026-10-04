@@ -22,7 +22,10 @@ input[type=search]{width:100%;padding:14px 16px;border:1px solid var(--line);bor
 @media(min-width:700px){.grid{columns:3}}
 @media(min-width:960px){.grid{columns:4}}
 .card{break-inside:avoid;margin:0 0 12px;background:var(--card);border-radius:14px;overflow:hidden;cursor:pointer;border:1px solid var(--line)}
-.card img{display:block;width:100%;height:auto}
+.card img,.card video{display:block;width:100%;height:auto;background:#dfe3e8}
+.sheet video{width:100%;border-radius:12px;display:block;max-height:60vh;background:#000}
+.sheet iframe.yt{width:100%;aspect-ratio:16/9;border:0;border-radius:12px;display:block}
+.play{position:relative}.play:after{content:'\25B6';position:absolute;right:10px;top:10px;background:rgba(0,0,0,.6);color:#fff;border-radius:99px;width:28px;height:28px;display:grid;place-items:center;font-size:12px}
 .card div{padding:10px 12px;font-weight:600;font-size:.92rem}
 .card:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .adbox{break-inside:avoid;margin:0 0 12px}
@@ -75,6 +78,23 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const CATS = ["All","Image","Video","Text"];
 let all = [], cat = "All", term = "", ads = {};
 const $ = id => document.getElementById(id);
+function ytId(u){ const m = (u||"").match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/); return m ? m[1] : null; }
+function thumb(p){
+  if (p.image_url) { const i = document.createElement("img"); i.loading = "lazy"; i.alt = p.title; i.src = p.image_url; return i; }
+  const y = ytId(p.video_url);
+  if (y) { const i = document.createElement("img"); i.loading = "lazy"; i.alt = p.title; i.src = "https://img.youtube.com/vi/" + y + "/hqdefault.jpg"; return i; }
+  if (p.video_url) { const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.preload = "metadata"; v.src = p.video_url + "#t=0.5"; return v; }
+  return null;
+}
+function modalMedia(p){
+  const y = ytId(p.video_url);
+  if (y) { const f = document.createElement("iframe"); f.className = "yt"; f.allowFullscreen = true;
+    f.src = "https://www.youtube-nocookie.com/embed/" + y; return f; }
+  if (p.video_url) { const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
+    if (p.image_url) v.poster = p.image_url; v.src = p.video_url; return v; }
+  if (p.image_url) { const i = document.createElement("img"); i.src = p.image_url; i.alt = p.title; return i; }
+  return null;
+}
 
 function adFrame(code, h){
   const f = document.createElement("iframe");
@@ -105,8 +125,9 @@ function renderGrid(){
   list.forEach((p, i) => {
     const c = document.createElement("div");
     c.className = "card"; c.tabIndex = 0;
-    c.innerHTML = (p.image_url ? '<img loading="lazy" alt="">' : "") + "<div></div>";
-    if (p.image_url) { c.querySelector("img").src = p.image_url; c.querySelector("img").alt = p.title; }
+    c.innerHTML = "<div></div>";
+    const m = thumb(p);
+    if (m) { if (p.video_url) c.classList.add("play"); c.prepend(m); }
     c.querySelector("div").textContent = p.title;
     c.onclick = () => openPrompt(p);
     c.onkeydown = e => { if (e.key === "Enter") openPrompt(p); };
@@ -119,7 +140,7 @@ function renderGrid(){
 }
 function openPrompt(p){
   const s = $("sheet"); s.innerHTML = "";
-  if (p.image_url) { const i = document.createElement("img"); i.src = p.image_url; i.alt = p.title; s.appendChild(i); }
+  const mm = modalMedia(p); if (mm) s.appendChild(mm);
   const h = document.createElement("h2"); h.textContent = p.title; s.appendChild(h);
   const c = document.createElement("div"); c.className = "cat"; c.textContent = p.category; s.appendChild(c);
   const pre = document.createElement("pre"); pre.textContent = p.prompt; s.appendChild(pre);
@@ -161,7 +182,8 @@ document.querySelectorAll("footer a").forEach(a => a.onclick = () => {
     db.from("prompts").select("*").order("created_at", { ascending: false }),
     db.from("settings").select("*")
   ]);
-  all = p.data || []; if (p.error) { $("empty").textContent = "Error: " + p.error.message; }
+  all = p.data || [];
+  if (p.error) { $("empty").hidden = false; $("empty").textContent = "Error: " + p.error.message; }
   (s.data || []).forEach(r => ads[r.key] = r.value);
   mountAd("adTop", ads.ad_top, 100);
   mountAd("adBottom", ads.ad_bottom, 100);

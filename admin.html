@@ -48,6 +48,9 @@ input:focus-visible,textarea:focus-visible,button:focus-visible,select:focus-vis
       <label for="prompt">Prompt</label><textarea id="prompt"></textarea>
       <label for="file">Image (upload from your phone)</label><input id="file" type="file" accept="image/*">
       <label for="url">Or image link</label><input id="url" placeholder="https://...">
+      <label for="vfile">Video (mp4, max 50 MB)</label><input id="vfile" type="file" accept="video/*">
+      <label for="vurl">Or video link (YouTube / Shorts link)</label><input id="vurl" placeholder="https://youtube.com/shorts/...">
+      <p class="hint" id="curVid"></p>
       <p class="hint" id="curImg"></p>
       <button id="save">Save prompt</button>
       <button class="alt" id="cancel" hidden>Cancel edit</button>
@@ -82,7 +85,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = id => document.getElementById(id);
 const ADS = ["ad_top", "ad_inline", "ad_modal", "ad_bottom"];
-let editId = null, editImg = "";
+let editId = null, editImg = "", editVid = "";
 
 async function show(){
   const { data } = await db.auth.getSession();
@@ -117,17 +120,19 @@ async function loadList(){
   });
 }
 function startEdit(p){
-  editId = p.id; editImg = p.image_url || "";
+  editId = p.id; editImg = p.image_url || ""; editVid = p.video_url || "";
   $("formTitle").textContent = "Edit prompt";
   $("title").value = p.title; $("cat").value = p.category; $("prompt").value = p.prompt;
-  $("url").value = ""; $("file").value = "";
+  $("url").value = ""; $("file").value = ""; $("vfile").value = ""; $("vurl").value = "";
   $("curImg").textContent = editImg ? "Current image is kept unless you add a new one." : "";
+  $("curVid").textContent = editVid ? "Current video is kept unless you add a new one." : "";
   $("cancel").hidden = false; $("save").textContent = "Save changes";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function resetForm(){
-  editId = null; editImg = "";
-  ["title","prompt","url","file"].forEach(i => $(i).value = "");
+  editId = null; editImg = ""; editVid = "";
+  $("curVid").textContent = "";
+  ["title","prompt","url","file","vfile","vurl"].forEach(i => $(i).value = "");
   $("formTitle").textContent = "Add a prompt"; $("curImg").textContent = "";
   $("cancel").hidden = true; $("save").textContent = "Save prompt";
 }
@@ -145,7 +150,17 @@ $("save").onclick = async () => {
     if (up.error) { $("msg").textContent = "Image upload failed: " + up.error.message; return; }
     image_url = db.storage.from("images").getPublicUrl(name).data.publicUrl;
   }
-  const row = { title, prompt, category: $("cat").value, image_url };
+  let video_url = $("vurl").value.trim() || editVid;
+  const vf = $("vfile").files[0];
+  if (vf) {
+    if (vf.size > 50 * 1024 * 1024) { $("msg").textContent = "Video is over 50 MB. Use a shorter or smaller clip."; return; }
+    $("msg").textContent = "Uploading video...";
+    const vn = Date.now() + "-" + vf.name.replace(/[^a-zA-Z0-9.]/g, "_");
+    const vu = await db.storage.from("images").upload(vn, vf, { contentType: vf.type });
+    if (vu.error) { $("msg").textContent = "Video upload failed: " + vu.error.message; return; }
+    video_url = db.storage.from("images").getPublicUrl(vn).data.publicUrl;
+  }
+  const row = { title, prompt, category: $("cat").value, image_url, video_url };
   const res = editId ? await db.from("prompts").update(row).eq("id", editId)
                      : await db.from("prompts").insert(row);
   if (res.error) { $("msg").textContent = "Could not save: " + res.error.message; return; }
