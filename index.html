@@ -161,7 +161,7 @@ document.querySelectorAll("footer a").forEach(a => a.onclick = () => {
     db.from("prompts").select("*").order("created_at", { ascending: false }),
     db.from("settings").select("*")
   ]);
-  all = p.data || [];
+  all = p.data || []; if (p.error) { $("empty").textContent = "Error: " + p.error.message; }
   (s.data || []).forEach(r => ads[r.key] = r.value);
   mountAd("adTop", ads.ad_top, 100);
   mountAd("adBottom", ads.ad_bottom, 100);
